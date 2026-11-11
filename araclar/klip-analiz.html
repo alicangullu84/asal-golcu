@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Klip analizi</title>
+<style>
+  body { background: #222; color: #eee; font: 13px/1.4 Consolas, monospace; margin: 10px; }
+  .klip { margin: 6px 0 14px; }
+  .serit { display: flex; flex-wrap: wrap; gap: 3px; }
+  .kare { position: relative; }
+  .kare span { position: absolute; left: 2px; top: 1px; background: #000; color: #fff; padding: 0 4px; font-size: 11px; }
+  canvas { display: block; }
+  pre { white-space: pre-wrap; word-break: break-all; }
+  video { position: fixed; right: 0; bottom: 0; width: 160px; opacity: 0.05; }
+</style>
+</head>
+<body>
+<div id="kareler"></div>
+<pre id="sonuc">calisiyor...</pre>
+<script>
+/* Kullanim: klip-analiz.html?k=v00,v01&s=0.2,0.6,1.0
+   Video oynatilirken her kare olculur (ileri sarma yok, hizli).
+   ax, ay: ilk karede karakterin ayak noktasi; boy: yuksekligi (kare yuksekligine oran);
+   giris: topun alt ortadan kadraja girdigi an; uc: en sola uzanma ani; ucX: o andaki sol sinir. */
+(async function () {
+  const q = new URLSearchParams(location.search);
+  const adlar = (q.get('k') || '').split(',').filter(Boolean);
+  const seritZaman = (q.get('s') || '0.1,0.5,0.9,1.3,2.0,3.0').split(',').map(Number);
+  const W = 160, H = 90;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  const yesilMi = (d, i) => d[i + 1] > 90 && d[i + 1] - Math.max(d[i], d[i + 2]) > 45;
+  const r3 = x => Math.round(x * 1000) / 1000;
+  const sonuc = {};
+  for (const ad of adlar) {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = '../videolar/' + ad + '.mp4';
+    document.body.appendChild(v);
+    await new Promise((res, rej) => { v.oncanplaythrough = res; v.onerror = () => rej(new Error(ad + ' yuklenemedi')); });
+    const kareler = [];
+    const seritler = [];
+    const kap = document.createElement('div'); kap.className = 'klip';
+    kap.innerHTML = '<b>' + ad + '</b> <span class="bilgi"></span><div class="serit"></div>';
+    document.getElementById('kareler').append(kap);
+    let sira = 0;
+    await new Promise(res => {
+      const isle = (simdi, meta) => {
+        const t = meta.mediaTime;
+        g.drawImage(v, 0, 0, W, H);
+        const d = g.getImageData(0, 0, W, H).data;
+        let x0 = W, y0 = H, x1 = -1, y1 = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          if (!yesilMi(d, (y * W + x) * 4)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+        kareler.push({ t, x0: x0 / W, x1: (x1 + 1) / W, y0: y0 / H, y1: (y1 + 1) / H, d: d.slice() });
+        while (sira < seritZaman.length && t >= seritZaman[sira]) {
+          const c2 = document.createElement('canvas'); c2.width = 224; c2.height = 126;
+          c2.getContext('2d').drawImage(v, 0, 0, 224, 126);
+          const k = document.createElement('div'); k.className = 'kare'; k.innerHTML = '<span>' + t.toFixed(2) + '</span>'; k.prepend(c2);
+          seritler.push(k);
+          sira++;
+        }
+        if (!v.ended) v.requestVideoFrameCallback(isle);
+      };
+      v.requestVideoFrameCallback(isle);
+      v.onended = () => setTimeout(res, 100);
+      v.play();
+    });
+    seritler.forEach(k => kap.querySelector('.serit').append(k));
+    const ilk = kareler[0];
+    const ax = (ilk.x0 + ilk.x1) / 2, ay = ilk.y1, boy = ilk.y1 - ilk.y0;
+    let giris = null;
+    const altSinir = Math.min(H - 1, Math.round((ay + 0.03) * H));
+    for (const k of kareler.slice(1)) {
+      let say = 0;
+      for (let y = altSinir; y < H; y++) for (let x = Math.round(W * 0.3); x < W * 0.7; x++) if (!yesilMi(k.d, (y * W + x) * 4)) say++;
+      if (say > 5) { giris = r3(k.t); break; }
+    }
+    let uc = kareler[0];
+    kareler.forEach(k => { if (k.x0 < uc.x0) uc = k; });
+    sonuc[ad] = { src: 'videolar/' + ad + '.mp4', sure: r3(v.duration), kare: kareler.length, ax: r3(ax), ay: r3(ay), boy: r3(boy), giris, uc: r3(uc.t), ucX: r3(uc.x0), ucY: r3((uc.y0 + uc.y1) / 2) };
+    kap.querySelector('.bilgi').textContent = JSON.stringify(sonuc[ad]);
+    v.remove();
+  }
+  document.getElementById('sonuc').textContent = JSON.stringify(sonuc);
+})().catch(e => { document.getElementById('sonuc').textContent = 'HATA ' + e.message; });
+</script>
+</body>
+</html>

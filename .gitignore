@@ -1,0 +1,8 @@
+# Flow'dan inen ozgun dosyalar (buyuk; oyun bunlari kullanmaz)
+gorseller/ham/
+videolar/ham/
+# gecici dosyalar
+*.tmp
+node_modules/
+.DS_Store
+Thumbs.db
