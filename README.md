@@ -4,7 +4,9 @@
 
 ## Çalıştırma
 
-`baslat.bat` dosyasına çift tıklayın. Yerel sunucu açılır ve oyun tarayıcıda `http://localhost:5180` adresinde başlar. Pencereyi kapatınca sunucu da kapanır.
+**İnternetten oynamak için:** https://alicangullu84.github.io/asal-golcu/
+
+**Bilgisayarda (internetsiz):** `baslat.bat` dosyasına çift tıklayın. Yerel sunucu açılır ve oyun tarayıcıda `http://localhost:5180` adresinde başlar. Pencereyi kapatınca sunucu da kapanır.
 
 Elle başlatmak için:
 
