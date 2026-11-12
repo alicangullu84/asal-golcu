@@ -173,9 +173,12 @@
           <button class="buyuk-dugme ikincil" data-git="album" type="button">Sayı albümü <small>${al[1] + al[2] + al[3]}/120</small></button>
           <button class="buyuk-dugme ikincil" data-git="hoca" type="button">Hoca köşesi</button>
           <button class="buyuk-dugme ikincil" data-git="ayarlar" type="button">Ayarlar</button>
+          <button class="buyuk-dugme ikincil" id="m-tam-ekran" type="button" data-tam-ekran>Tam Ekran</button>
         </div>
       </div>`;
     $('#m-penalti').onclick = () => { S.tikla(); macBaslat({ mod: 'penalti' }); };
+    $('#m-tam-ekran').onclick = () => { S.tikla(); tamEkranDugme(); };
+    tamEkranEtiket();
   };
 
   /* ---------- harita ---------- */
@@ -233,6 +236,7 @@
   function rastgeleKaleci() { const a = acikTurlar(); return a[Math.floor(Math.random() * a.length)].id; }
 
   function macBaslat(ayar) {
+    if (telefonMu()) tamEkranAc();
     let plan, rakip, baslik, sure = null, adet = 10;
     if (ayar.mod === 'kupa') {
       const t = M.KUPA[ayar.tur - 1];
@@ -301,6 +305,9 @@
     $('#katman').hidden = true;
     klipleriHazirla(MAC.rakip);
     tabela();
+    gorselOlcu();
+    kameraSigdir();
+    requestAnimationFrame(kameraSigdir);
   }
 
   function tabela() {
@@ -344,8 +351,19 @@
   const KLIP_ATLA = /[?&]klipsiz=1/.test(location.search);
   const klipDestek = () => !!(window.KLIPLER && window.Klip);
 
+  function klipleriKapat() {
+    if (KLIP.golcu) { KLIP.golcu.gizle(); KLIP.golcu.tuval.remove(); KLIP.golcu = null; }
+    if (KLIP.kaleci) {
+      Object.values(KLIP.kaleci).forEach(k => { k.gizle(); k.tuval.remove(); });
+      KLIP.kaleci = null;
+    }
+    const g = $('#golcu'); if (g) g.hidden = false;
+    const k = $('#kaleci-kap'); if (k) k.hidden = false;
+  }
+  window.addEventListener('klip-saydam-yok', klipleriKapat);
+
   function klipleriHazirla(rakip) {
-    if (!klipDestek()) return;
+    if (!klipDestek() || window.KlipSaydamDestek === false) return;
     const meta = window.KLIPLER;
     if (!KLIP.golcu && meta.golcu) { KLIP.golcu = new window.Klip(meta.golcu.src, $('#golcu-katman')); KLIP.golcu.meta = meta.golcu; }
     if (KLIP.rakip !== rakip) {
@@ -391,6 +409,106 @@
     }
   }
 
+  /* ---------- telefon olcusu, tam ekran, kamera ---------- */
+  /* Kale agzi (yatay ~%24-76) ve ayaktaki oyuncu kadrajda kalsin. */
+  const GUVENLI_KARE = { x: 0.18, y: 0.30, w: 0.64, h: 0.72 };
+  const cepheSorgu = window.matchMedia('(orientation: portrait) and (max-width: 820px)');
+  function telefonMu() {
+    return window.matchMedia('(max-width: 820px), (max-height: 520px) and (pointer: coarse)').matches;
+  }
+  function gorselOlcu() {
+    const vv = window.visualViewport;
+    const h = vv ? vv.height : window.innerHeight;
+    const u = vv ? vv.offsetTop : 0;
+    document.documentElement.style.setProperty('--ekran-h', Math.round(h) + 'px');
+    document.documentElement.style.setProperty('--ekran-ust', Math.round(u) + 'px');
+  }
+  function tamEkranAcikMi() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function tamEkranEtiket() {
+    const acik = tamEkranAcikMi();
+    document.querySelectorAll('[data-tam-ekran]').forEach(b => {
+      b.textContent = acik ? 'Küçült' : 'Tam Ekran';
+      b.setAttribute('aria-pressed', acik ? 'true' : 'false');
+    });
+  }
+  function tamEkranAc() {
+    document.body.classList.add('tam-ekran');
+    const el = document.documentElement;
+    const iste = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (iste && !tamEkranAcikMi()) {
+      try {
+        const p = iste.call(el);
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (e) { /* iOS webview reddeder; CSS kadraj yeter */ }
+    }
+    gorselOlcu();
+    requestAnimationFrame(kameraSigdir);
+  }
+  function tamEkranKapat() {
+    const cikis = document.exitFullscreen || document.webkitExitFullscreen;
+    if (tamEkranAcikMi() && cikis) {
+      try {
+        const p = cikis.call(document);
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (e) { /* cikis yok */ }
+    }
+    document.body.classList.remove('tam-ekran');
+    gorselOlcu();
+    requestAnimationFrame(kameraSigdir);
+  }
+  function tamEkranDugme() {
+    if (tamEkranAcikMi()) tamEkranKapat();
+    else tamEkranAc();
+  }
+  /* Portre telefonda 16:9 sahayi, kale ve oyuncu kirpilmadan buyut. */
+  function kameraSigdir() {
+    const sahne = $('#sahne');
+    const kamera = $('#kamera');
+    if (!sahne || !kamera) return;
+    if (!cepheSorgu.matches) {
+      sahne.classList.remove('yerlesti');
+      kamera.style.left = '';
+      kamera.style.top = '';
+      kamera.style.right = '';
+      kamera.style.bottom = '';
+      kamera.style.width = '';
+      kamera.style.height = '';
+      sahne.style.removeProperty('--kamera-sol');
+      sahne.style.removeProperty('--kamera-ust');
+      sahne.style.removeProperty('--kamera-gen');
+      sahne.style.removeProperty('--kamera-boy');
+      return;
+    }
+    const sw = sahne.clientWidth;
+    const sh = sahne.clientHeight;
+    if (sw < 8 || sh < 8) return;
+    const guvenli = GUVENLI_KARE;
+    const kh0 = sw * 9 / 16;
+    let S = Math.min(1 / guvenli.w, sh / (guvenli.h * kh0));
+    if (S < 1) S = Math.min(1, sh / kh0);
+    const kw = sw * S;
+    const kh = kh0 * S;
+    let left = sw / 2 - (guvenli.x + guvenli.w / 2) * kw;
+    let top = sh / 2 - (guvenli.y + guvenli.h / 2) * kh;
+    if (kw >= sw - 0.5) left = Math.min(0, Math.max(sw - kw, left));
+    else left = (sw - kw) / 2;
+    if (kh >= sh - 0.5) top = Math.min(0, Math.max(sh - kh, top));
+    else top = (sh - kh) / 2;
+    kamera.style.right = 'auto';
+    kamera.style.bottom = 'auto';
+    kamera.style.width = kw + 'px';
+    kamera.style.height = kh + 'px';
+    kamera.style.left = left + 'px';
+    kamera.style.top = top + 'px';
+    sahne.classList.add('yerlesti');
+    sahne.style.setProperty('--kamera-sol', left + 'px');
+    sahne.style.setProperty('--kamera-ust', top + 'px');
+    sahne.style.setProperty('--kamera-gen', kw + 'px');
+    sahne.style.setProperty('--kamera-boy', kh + 'px');
+  }
+
   /* ---------- sahne ---------- */
   function sahneSifirla() {
     const kk = $('#kaleci-kap');
@@ -405,6 +523,7 @@
     $('#golcu').getAnimations().forEach(a => a.cancel());
     $('#buyuk-yazi').className = 'buyuk-yazi';
     $('#ayrilis').className = 'ayrilis-tabela';
+    kameraSigdir();
     klipBeklemeKaresi();
   }
 
@@ -586,10 +705,11 @@
 
   /* bolgenin sahnedeki merkezi (yuzde) */
   function bolgeMerkezi(i) {
-    const sahne = $('#sahne').getBoundingClientRect();
+    const kutu = $('#kamera').getBoundingClientRect();
+    if (!kutu.width || !kutu.height) return { x: 50, y: (KALE.ust + KALE.alt) / 2 };
     if (i < 0) return { x: 50, y: (KALE.ust + KALE.alt) / 2 + 6 };
     const r = document.querySelector('.bolge[data-i="' + i + '"]').getBoundingClientRect();
-    return { x: ((r.left + r.width / 2) - sahne.left) / sahne.width * 100, y: ((r.top + r.height / 2) - sahne.top) / sahne.height * 100 };
+    return { x: ((r.left + r.width / 2) - kutu.left) / kutu.width * 100, y: ((r.top + r.height / 2) - kutu.top) / kutu.height * 100 };
   }
 
   function canlandir(el, kareler, sure, yumusak) {
@@ -618,10 +738,10 @@
 
     /* kaleci dalisi */
     const kh = kaleciI === null ? { x: 50, y: 60 } : bolgeMerkezi(kaleciI);
-    const sahne = $('#sahne').getBoundingClientRect();
-    const dx = (kh.x - 50) / 100 * sahne.width * 0.92;
+    const kutu = $('#kamera').getBoundingClientRect();
+    const dx = (kh.x - 50) / 100 * kutu.width * 0.92;
     const ustteMi = kh.y < (KALE.ust + KALE.alt) / 2 - 2;
-    const dy = ustteMi ? -sahne.height * 0.08 : sahne.height * 0.015;
+    const dy = ustteMi ? -kutu.height * 0.08 : kutu.height * 0.015;
     let aci = 0;
     if (Math.abs(kh.x - 50) > 6) aci = (kh.x < 50 ? -1 : 1) * (ustteMi ? 55 : 78);
     const son = 'translate(calc(-50% + ' + dx + 'px), calc(-100% + ' + dy + 'px)) rotate(' + aci + 'deg)' + (aci === 0 && !ustteMi ? ' scaleY(0.85)' : '');
@@ -1222,6 +1342,17 @@
   $('#b-taktik').onclick = () => { if (MAC && $('#katman').hidden) taktikAc(false); };
   $('#b-joker').onclick = () => jokerKullan();
   $('#b-duraklat').onclick = () => duraklatMenusu();
+  $('#b-tam-ekran').onclick = () => tamEkranDugme();
+  document.addEventListener('fullscreenchange', () => { tamEkranEtiket(); gorselOlcu(); kameraSigdir(); });
+  document.addEventListener('webkitfullscreenchange', () => { tamEkranEtiket(); gorselOlcu(); kameraSigdir(); });
+  gorselOlcu();
+  window.addEventListener('resize', () => { gorselOlcu(); kameraSigdir(); });
+  if (window.visualViewport) {
+    visualViewport.addEventListener('resize', () => { gorselOlcu(); kameraSigdir(); });
+    visualViewport.addEventListener('scroll', gorselOlcu);
+  }
+  window.addEventListener('orientationchange', () => setTimeout(() => { gorselOlcu(); kameraSigdir(); }, 250));
+  if (window.ResizeObserver) new ResizeObserver(() => kameraSigdir()).observe($('#sahne'));
 
   /* toptan kaydirarak sut */
   let surukle = null;
